@@ -30,23 +30,58 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Prepare Rubina Project
+        run: |
+          set -e
+
+          echo "Searching for Gradle project..."
+
+          if find . -maxdepth 3 -name "settings.gradle" -o -name "settings.gradle.kts" | grep -q .; then
+            echo "Gradle project already exists."
+          else
+            echo "Gradle project not found."
+            echo "Searching for ZIP files..."
+
+            ZIP_FILE=$(find . -type f -iname "*.zip" -print -quit)
+
+            if [ -z "$ZIP_FILE" ]; then
+              echo "ERROR: No ZIP file and no Gradle project found."
+              echo "The repository must contain the Rubina project files or a ZIP file."
+              exit 1
+            fi
+
+            echo "ZIP found:"
+            echo "$ZIP_FILE"
+
+            mkdir -p extracted
+            unzip -o "$ZIP_FILE" -d extracted
+
+            echo "ZIP extracted."
+          fi
+
       - name: Find Gradle Project
         run: |
-          echo "Searching for settings.gradle..."
+          set -e
 
-          PROJECT_DIR=$(find . -name "settings.gradle" -not -path "./.git/*" -print -quit)
+          SETTINGS_FILE=$(find . \
+            -type f \
+            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
+            -not -path "./.git/*" \
+            -print -quit)
 
-          if [ -z "$PROJECT_DIR" ]; then
+          if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: settings.gradle was not found."
+            echo "Repository contents:"
+            find . -maxdepth 6 -type f | sort
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PROJECT_DIR")
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "Gradle project found in:"
+          echo "================================"
+          echo "Gradle project found:"
           echo "$PROJECT_DIR"
-
-          PROJECT_DIR="${PROJECT_DIR#./}"
+          echo "================================"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
@@ -55,22 +90,21 @@ jobs:
           echo "Project directory:"
           echo "$PROJECT_DIR"
 
+          echo ""
           echo "Project files:"
-          find "$PROJECT_DIR" -maxdepth 4 -type f | sort
+          find "$PROJECT_DIR" -maxdepth 5 -type f | sort
 
       - name: Build Rubina APK
         run: |
+          set -o pipefail
+
           cd "$PROJECT_DIR"
 
           echo "Current directory:"
           pwd
 
-          echo "Gradle files:"
-          ls -la
-
-          echo "Starting APK build..."
-
-          set -o pipefail
+          echo ""
+          echo "Starting Gradle build..."
 
           gradle :app:assembleDebug \
             --no-daemon \
@@ -82,10 +116,13 @@ jobs:
         if: always()
         run: |
           echo "================================"
-          echo " APK FILES"
+          echo "APK FILES"
           echo "================================"
 
-          find "$GITHUB_WORKSPACE" -type f -name "*.apk" -print
+          find "$GITHUB_WORKSPACE" \
+            -type f \
+            -name "*.apk" \
+            -print
 
           echo "================================"
 
