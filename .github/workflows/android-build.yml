@@ -1,4 +1,4 @@
-name: Android Build
+name: Rubina Android Build
 
 on:
   workflow_dispatch:
@@ -15,7 +15,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+
+      - name: Checkout Project
         uses: actions/checkout@v4
 
       - name: Setup Java 17
@@ -31,27 +32,52 @@ jobs:
 
       - name: Check Project
         run: |
-          echo "=== PROJECT FILES ==="
-          find . -maxdepth 4 -type f | sort
-          echo "=== JAVA ==="
+          echo "================================"
+          echo " RUBINA PROJECT CHECK"
+          echo "================================"
+          echo "Java version:"
           java -version
-          echo "=== GRADLE ==="
+          echo ""
+          echo "Gradle version:"
           gradle --version
+          echo ""
+          echo "Project files:"
+          find . -maxdepth 5 -type f | sort
+          echo ""
+          echo "================================"
 
       - name: Build Debug APK
         run: |
-          gradle :app:assembleDebug --no-daemon --stacktrace
+          set -o pipefail
+          gradle :app:assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            2>&1 | tee build.log
 
       - name: Find APK
         if: always()
         run: |
-          echo "=== APK FILES ==="
+          echo "================================"
+          echo " APK SEARCH"
+          echo "================================"
           find . -type f -name "*.apk" -print
+          echo "================================"
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Rubina-APK
-          path: app/build/outputs/apk/**/*.apk
+          path: |
+            app/build/outputs/apk/**/*.apk
+            app/build/outputs/apk/*.apk
           if-no-files-found: error
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rubina-Build-Log
+          path: build.log
+          if-no-files-found: warn
