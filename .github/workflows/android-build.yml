@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -30,71 +31,75 @@ jobs:
           gradle-version: '8.7'
 
       - name: Prepare Rubina Project
+        shell: bash
         run: |
           set -e
 
           echo "Searching for Gradle project..."
 
-          SETTINGS_FILE=$(find . \
-            -type f \
-            -name "settings.gradle" -o -name "settings.gradle.kts" \
-            -not -path "./.git/*" \
-            -print -quit)
+          SETTINGS_FILE=$(find . -type f | grep -E '/settings\.gradle(\.kts)?$' | grep -v '/.git/' | head -n 1 || true)
 
           if [ -n "$SETTINGS_FILE" ]; then
-            echo "Gradle project already exists."
+            echo "Gradle project already exists:"
+            echo "$SETTINGS_FILE"
           else
             echo "Gradle project not found."
+            echo "Searching for ZIP..."
 
-            ZIP_FILE=$(find . \
-              -type f \
-              -iname "*.zip" \
-              -not -path "./.git/*" \
-              -print -quit)
+            ZIP_FILE=$(find . -type f -iname "*.zip" | grep -v '/.git/' | head -n 1 || true)
 
             if [ -z "$ZIP_FILE" ]; then
-              echo "ERROR: No ZIP file and no Gradle project found."
+              echo "ERROR: No ZIP file found."
               exit 1
             fi
 
-            echo "ZIP found: $ZIP_FILE"
+            echo "ZIP found:"
+            echo "$ZIP_FILE"
 
             mkdir -p extracted
+
             unzip -o "$ZIP_FILE" -d extracted
 
             echo "ZIP extracted."
           fi
 
       - name: Find Gradle Project
+        shell: bash
         run: |
           set -e
 
-          SETTINGS_FILE=$(find . \
-            -type f \
-            -name "settings.gradle" -o -name "settings.gradle.kts" \
-            -not -path "./.git/*" \
-            -print -quit)
+          SETTINGS_FILE=$(find . -type f | grep -E '/settings\.gradle(\.kts)?$' | grep -v '/.git/' | head -n 1 || true)
 
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: settings.gradle was not found."
+
+            echo "Repository contents:"
             find . -maxdepth 8 -type f | sort
+
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
+          echo "================================"
           echo "Gradle project found:"
           echo "$PROJECT_DIR"
+          echo "================================"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Fix Backendless Callback Package
+      - name: Fix Backendless Callback
+        shell: bash
         run: |
           set -e
 
           FILE="$PROJECT_DIR/app/src/main/java/com/rubina/app/data/RubinaRepository.java"
 
+          echo "Checking:"
+          echo "$FILE"
+
           if [ -f "$FILE" ]; then
+
             sed -i 's/com\.backendless\.callbacks\.AsyncCallback/com.backendless.async.callback.AsyncCallback/g' "$FILE"
 
             if ! grep -q "import com.backendless.async.callback.AsyncCallback;" "$FILE"; then
@@ -104,15 +109,67 @@ jobs:
             sed -i '/import com\.backendless\.persistence\.DataQueryBuilder;/d' "$FILE"
             sed -i '/import java\.util\.List;/d' "$FILE"
 
-            echo "Backendless callback package fixed."
+            echo "Backendless callback fixed."
+
           else
-            echo "RubinaRepository.java not found."
+            echo "WARNING: RubinaRepository.java not found."
           fi
 
       - name: Show Project
+        shell: bash
         run: |
-          echo "Project directory:"
+          echo "Project:"
+          echo "$PROJECT_DIR"
+
+          echo ""
+          echo "Files:"
+          find "$PROJECT_DIR" -maxdepth 6 -type f | sort
+
+      - name: Build Rubina APK
+        shell: bash
+        run: |
+          set -o pipefail
+
+          cd "$PROJECT_DIR"
+
+          echo "Current directory:"
           pwd
 
           echo ""
-          echo "Project files:"
+          echo "Starting Gradle build..."
+
+          gradle :app:assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Find APK
+        if: always()
+        shell: bash
+        run: |
+          echo "================================"
+          echo "APK FILES"
+          echo "================================"
+
+          find "$GITHUB_WORKSPACE" -type f -name "*.apk" -print
+
+          echo "================================"
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rubina-APK
+          path: |
+            **/app/build/outputs/apk/**/*.apk
+            **/app/build/outputs/apk/*.apk
+          if-no-files-found: error
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rubina-Build-Log
+          path: build.log
+          if-no-files-found: warn
