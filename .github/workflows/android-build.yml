@@ -18,20 +18,23 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
 
-      - name: Extract project
+      - name: Extract Rubina project
         run: |
           unzip -o Rubina_GitHub_Ready_Structure.zip
-          ls
+          ls -la
+          ls -la gradle/wrapper
 
-      - name: Build APK
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      - name: Build Rubina APK
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Rubina-APK
           path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
