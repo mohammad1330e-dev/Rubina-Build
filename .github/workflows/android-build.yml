@@ -20,6 +20,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Extract project
+        run: |
+          unzip -o Rubina_GitHub_Ready_Structure.zip
+          ls
+
       - name: Build APK
         run: |
           chmod +x gradlew
