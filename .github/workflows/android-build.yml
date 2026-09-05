@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -36,22 +35,29 @@ jobs:
 
           echo "Searching for Gradle project..."
 
-          if find . -maxdepth 3 -name "settings.gradle" -o -name "settings.gradle.kts" | grep -q .; then
+          SETTINGS_FILE=$(find . \
+            -type f \
+            -name "settings.gradle" -o -name "settings.gradle.kts" \
+            -not -path "./.git/*" \
+            -print -quit)
+
+          if [ -n "$SETTINGS_FILE" ]; then
             echo "Gradle project already exists."
           else
             echo "Gradle project not found."
-            echo "Searching for ZIP files..."
 
-            ZIP_FILE=$(find . -type f -iname "*.zip" -print -quit)
+            ZIP_FILE=$(find . \
+              -type f \
+              -iname "*.zip" \
+              -not -path "./.git/*" \
+              -print -quit)
 
             if [ -z "$ZIP_FILE" ]; then
               echo "ERROR: No ZIP file and no Gradle project found."
-              echo "The repository must contain the Rubina project files or a ZIP file."
               exit 1
             fi
 
-            echo "ZIP found:"
-            echo "$ZIP_FILE"
+            echo "ZIP found: $ZIP_FILE"
 
             mkdir -p extracted
             unzip -o "$ZIP_FILE" -d extracted
@@ -65,81 +71,48 @@ jobs:
 
           SETTINGS_FILE=$(find . \
             -type f \
-            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
+            -name "settings.gradle" -o -name "settings.gradle.kts" \
             -not -path "./.git/*" \
             -print -quit)
 
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: settings.gradle was not found."
-            echo "Repository contents:"
-            find . -maxdepth 6 -type f | sort
+            find . -maxdepth 8 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "================================"
           echo "Gradle project found:"
           echo "$PROJECT_DIR"
-          echo "================================"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Fix Backendless Callback Package
+        run: |
+          set -e
+
+          FILE="$PROJECT_DIR/app/src/main/java/com/rubina/app/data/RubinaRepository.java"
+
+          if [ -f "$FILE" ]; then
+            sed -i 's/com\.backendless\.callbacks\.AsyncCallback/com.backendless.async.callback.AsyncCallback/g' "$FILE"
+
+            if ! grep -q "import com.backendless.async.callback.AsyncCallback;" "$FILE"; then
+              sed -i '/import com.backendless.Backendless;/a import com.backendless.async.callback.AsyncCallback;' "$FILE"
+            fi
+
+            sed -i '/import com\.backendless\.persistence\.DataQueryBuilder;/d' "$FILE"
+            sed -i '/import java\.util\.List;/d' "$FILE"
+
+            echo "Backendless callback package fixed."
+          else
+            echo "RubinaRepository.java not found."
+          fi
 
       - name: Show Project
         run: |
           echo "Project directory:"
-          echo "$PROJECT_DIR"
-
-          echo ""
-          echo "Project files:"
-          find "$PROJECT_DIR" -maxdepth 5 -type f | sort
-
-      - name: Build Rubina APK
-        run: |
-          set -o pipefail
-
-          cd "$PROJECT_DIR"
-
-          echo "Current directory:"
           pwd
 
           echo ""
-          echo "Starting Gradle build..."
-
-          gradle :app:assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
-
-      - name: Find APK
-        if: always()
-        run: |
-          echo "================================"
-          echo "APK FILES"
-          echo "================================"
-
-          find "$GITHUB_WORKSPACE" \
-            -type f \
-            -name "*.apk" \
-            -print
-
-          echo "================================"
-
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Rubina-APK
-          path: |
-            **/app/build/outputs/apk/**/*.apk
-            **/app/build/outputs/apk/*.apk
-          if-no-files-found: error
-
-      - name: Upload Build Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Rubina-Build-Log
-          path: build.log
-          if-no-files-found: warn
+          echo "Project files:"
