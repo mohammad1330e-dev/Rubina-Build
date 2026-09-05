@@ -16,7 +16,7 @@ jobs:
 
     steps:
 
-      - name: Checkout Project
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Java 17
@@ -30,39 +30,39 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Check Project
+      - name: Show Project
         run: |
-          echo "================================"
-          echo " RUBINA PROJECT CHECK"
-          echo "================================"
-          echo "Java version:"
-          java -version
-          echo ""
-          echo "Gradle version:"
-          gradle --version
-          echo ""
-          echo "Project files:"
+          echo "===== PROJECT ====="
+          pwd
           find . -maxdepth 5 -type f | sort
-          echo ""
-          echo "================================"
+          echo "==================="
 
-      - name: Build Debug APK
+      - name: Build Rubina APK
+        id: build
         run: |
-          set -o pipefail
+          set +e
+
           gradle :app:assembleDebug \
             --no-daemon \
             --stacktrace \
-            --info \
-            2>&1 | tee build.log
+            --info > build.log 2>&1
+
+          RESULT=$?
+
+          echo "===== GRADLE OUTPUT =====" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          tail -n 200 build.log >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "===== END GRADLE OUTPUT =====" >> "$GITHUB_STEP_SUMMARY"
+
+          exit $RESULT
 
       - name: Find APK
         if: always()
         run: |
-          echo "================================"
-          echo " APK SEARCH"
-          echo "================================"
+          echo "===== APK FILES ====="
           find . -type f -name "*.apk" -print
-          echo "================================"
+          echo "===================="
 
       - name: Upload APK
         if: success()
