@@ -30,39 +30,64 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Find Gradle Project
+        run: |
+          echo "Searching for settings.gradle..."
+
+          PROJECT_DIR=$(find . -name "settings.gradle" -not -path "./.git/*" -print -quit)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: settings.gradle was not found."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_DIR")
+
+          echo "Gradle project found in:"
+          echo "$PROJECT_DIR"
+
+          PROJECT_DIR="${PROJECT_DIR#./}"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
       - name: Show Project
         run: |
-          echo "===== PROJECT ====="
-          pwd
-          find . -maxdepth 5 -type f | sort
-          echo "==================="
+          echo "Project directory:"
+          echo "$PROJECT_DIR"
+
+          echo "Project files:"
+          find "$PROJECT_DIR" -maxdepth 4 -type f | sort
 
       - name: Build Rubina APK
-        id: build
         run: |
-          set +e
+          cd "$PROJECT_DIR"
+
+          echo "Current directory:"
+          pwd
+
+          echo "Gradle files:"
+          ls -la
+
+          echo "Starting APK build..."
+
+          set -o pipefail
 
           gradle :app:assembleDebug \
             --no-daemon \
             --stacktrace \
-            --info > build.log 2>&1
-
-          RESULT=$?
-
-          echo "===== GRADLE OUTPUT =====" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          tail -n 200 build.log >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "===== END GRADLE OUTPUT =====" >> "$GITHUB_STEP_SUMMARY"
-
-          exit $RESULT
+            --info \
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
       - name: Find APK
         if: always()
         run: |
-          echo "===== APK FILES ====="
-          find . -type f -name "*.apk" -print
-          echo "===================="
+          echo "================================"
+          echo " APK FILES"
+          echo "================================"
+
+          find "$GITHUB_WORKSPACE" -type f -name "*.apk" -print
+
+          echo "================================"
 
       - name: Upload APK
         if: success()
@@ -70,8 +95,8 @@ jobs:
         with:
           name: Rubina-APK
           path: |
-            app/build/outputs/apk/**/*.apk
-            app/build/outputs/apk/*.apk
+            **/app/build/outputs/apk/**/*.apk
+            **/app/build/outputs/apk/*.apk
           if-no-files-found: error
 
       - name: Upload Build Log
